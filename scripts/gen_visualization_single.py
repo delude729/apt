@@ -231,7 +231,20 @@ def main():
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     # Save the result
-    result_image.save(output_path)
+    # 如果图像是 RGBA 模式，转换为 RGB（用白色背景）
+    if result_image.mode == 'RGBA':
+        # 创建白色背景
+        background = Image.new('RGB', result_image.size, (255, 255, 255))
+        # 将 RGBA 图像粘贴到背景上（自动处理透明度）
+        background.paste(result_image, mask=result_image.split()[-1])  # 使用 Alpha 通道作为 mask
+        result_image = background
+    elif result_image.mode != 'RGB':
+        # 其他模式（如 L, P 等）也转为 RGB
+        result_image = result_image.convert('RGB')
+
+# 保存为 JPEG（现在一定是 RGB 模式）
+    result_image.save(output_path, 'JPEG')
+    # result_image.save(output_path)
     print(f"Saved visualization to {output_path}")
 
 if __name__ == "__main__":

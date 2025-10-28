@@ -46,6 +46,8 @@ def compute_patch_entropy_vectorized(image, patch_size=16, num_scales=2, bins=51
             image = image[0]
     
     entropy_maps = {}
+    simularity_maps = {}
+    score_maps = {}
     H, W = image.shape
 
     patch_sizes = [patch_size * (2**i) for i in range(num_scales)]
@@ -70,22 +72,31 @@ def compute_patch_entropy_vectorized(image, patch_size=16, num_scales=2, bins=51
         # Normalize histograms to get probabilities
         probabilities = histograms / (patch_size * patch_size)
 
-        # Compute entropy: -sum(p * log2(p)), avoiding log(0)
         epsilon = 1e-10
+        # Compute simularity : KL divergence
+        probabilities_neighbor = probabilities.reshape(num_patches_h, num_patches_w, -1)
+        probabilities_neighbor = torch.cat([probabilities_neighbor[:, 1:, :], probabilities_neighbor[:, -2:-1, :]], dim=1)
+        simularity = torch.sum(probabilities.reshape(num_patches_h, num_patches_w, -1) * torch.log2((probabilities.reshape(num_patches_h, num_patches_w, -1) + epsilon) / (probabilities_neighbor + epsilon)), dim = 2)
+        # Compute entropy: -sum(p * log2(p)), avoiding log(0)
+        
         entropy = -torch.sum(probabilities * torch.log2(probabilities + epsilon), dim=1)
 
         # Reshape back to spatial dimensions
         entropy_map = entropy.reshape(num_patches_h, num_patches_w)
-
+        simularity_map = simularity.reshape(num_patches_h, num_patches_w)
+        
+        score_map = entropy_map + simularity_map
+        print(score_map.shape)
         # Assign a high value to padded regions
         if pad_h > 0:
-            entropy_map[-1, :] = pad_value  # High entropy at bottom row
+            score_map[-1, :] = pad_value  # High entropy at bottom row
         if pad_w > 0:
-            entropy_map[:, -1] = pad_value  # High entropy at right column
+            score_map[:, -1] = pad_value  # High entropy at right column
 
         entropy_maps[patch_size] = entropy_map
-
-    return entropy_maps
+        simularity_maps[patch_size] = simularity_map
+        score_maps[patch_size] = score_map
+    return score_maps
 
 def compute_patch_entropy_batched(images, patch_size=16, num_scales=2, bins=512, pad_value=1e6):
     """
